@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>DRIVER MITRA - Your Roadside Partner | ड्राइवर मित्र</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#f97316" />
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74',
+              400: '#fb923c', 500: '#f97316', 600: '#ea580c', 700: '#c2410c',
+              800: '#9a3412', 900: '#7c2d12', 950: '#431407'
+            },
+            navy: {
+              800: '#1e293b', 850: '#172033', 900: '#0f172a', 950: '#090d16'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- React 18 & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+  <!-- Babel Standalone for live JSX execution -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body { font-family: 'Inter', 'Noto Sans Devanagari', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .leaflet-popup-content-wrapper { border-radius: 1rem !important; padding: 4px !important; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 9999px; }
+    @keyframes pulseSlow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .animate-pulse-slow { animation: pulseSlow 3s infinite; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-navy-950 dark:text-slate-100 min-h-screen antialiased selection:bg-brand-500 selection:text-white transition-colors duration-200">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- 1. SEED DATA & DATABASE LOGIC ---
+    const SEED_USERS = [
+      { id: 'user_driver_1', role: 'DRIVER', name: 'Sardar Gurdeep Singh', phone: '9876543210', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', language: 'hi' },
+      { id: 'user_driver_2', role: 'DRIVER', name: 'Rameshwar Yadav', phone: '9812345678', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', language: 'hi' },
+      { id: 'user_prov_mechanic', role: 'PROVIDER', name: 'Ustad Mohammed Rafiq', phone: '9811223344', providerId: 'prov_sgtn_mechanic_1', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150' },
+      { id: 'user_prov_wireman', role: 'PROVIDER', name: 'Santosh Gupta', phone: '9822334455', providerId: 'prov_sgtn_wireman_1', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150' },
+      { id: 'user_prov_towing', role: 'PROVIDER', name: 'Balwinder Dhillon', phone: '9833445566', providerId: 'prov_sgtn_towing_1', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150' },
+      { id: 'user_prov_pending', role: 'PROVIDER', name: 'Kailash Sharma', phone: '9844556677', providerId: 'prov_pending_tyre_1', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150' },
+      { id: 'user_admin', role: 'ADMIN', name: 'Central Control Admin', phone: '9800000001', email: 'admin@drivermitra.in', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' }
+    ];
+
+    const SEED_VEHICLES = [
+      { id: 'veh_1', userId: 'user_driver_1', vehicleNumber: 'PB 10 CT 8492', vehicleType: 'Trailer', make: 'Tata Motors', model: 'Prima 5530.S (4x2)', year: 2023, fuelType: 'Diesel', isPrimary: true },
+      { id: 'veh_2', userId: 'user_driver_1', vehicleNumber: 'HR 55 AH 3319', vehicleType: 'Truck', make: 'Ashok Leyland', model: 'AVTR 3520 Tipper', year: 2022, fuelType: 'Diesel', isPrimary: false },
+      { id: 'veh_3', userId: 'user_driver_2', vehicleNumber: 'UP 78 BT 9012', vehicleType: 'Tanker', make: 'BharatBenz', model: '2823R Tanker Carrier', year: 2024, fuelType: 'Diesel', isPrimary: true }
+    ];
+
+    const SEED_PROVIDERS = [
+      {
+        id: 'prov_sgtn_mechanic_1', userId: 'user_prov_mechanic', businessName: 'Kisan Diesel Works & BS6 Roadside Specialist',
+        ownerName: 'Ustad Mohammed Rafiq', category: 'MECHANIC', phone: '9811223344', whatsapp: '919811223344',
+        address: 'Plot 42, Block C, Sanjay Gandhi Transport Nagar (SGTN)', city: 'Delhi', state: 'Delhi', pincode: '110042',
+        lat: 28.7580, lng: 77.1445, serviceRadiusKm: 50, experienceYears: 18,
+        description: 'Specialist in Cummins, Tata, Leyland & BharatBenz BS4/BS6 heavy engine overhaul, clutch pressure plate replacement, gearbox breakdown and 24x7 highway mobile van assistance.',
+        priceRange: '₹₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'VERIFIED', rating: 4.8, reviewCount: 34,
+        profilePhoto: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=500',
+        shopPhotos: ['https://images.unsplash.com/photo-1613214149922-f1809c99b414?w=500'],
+        capabilities: ['BS4 / BS6 Ready', 'Engine Overhaul', 'Clutch Booster', 'Air Brakes', '24x7 Roadside Van'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'Tipper', 'Bus', 'LCV'],
+        documents: [{ id: 'd1', type: 'Trade License', name: 'MCD_Trade_License.pdf' }, { id: 'd2', type: 'GST', name: 'GST_Certificate.pdf' }]
+      },
+      {
+        id: 'prov_sgtn_wireman_1', userId: 'user_prov_wireman', businessName: 'Gupta Truck Auto Electrician & ECM Solutions',
+        ownerName: 'Santosh Gupta', category: 'WIREMAN', phone: '9822334455', whatsapp: '919822334455',
+        address: 'Shop 18, Near Mother Dairy, GT Karnal Road, SGTN', city: 'Delhi', state: 'Delhi', pincode: '110042',
+        lat: 28.7540, lng: 77.1410, serviceRadiusKm: 25, experienceYears: 12,
+        description: 'Expert auto electrician for 24V commercial systems, starter motor, alternator rewinding, full cabin harness rewiring, CAN bus troubleshooting.',
+        priceRange: '₹₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'VERIFIED', rating: 4.7, reviewCount: 21,
+        profilePhoto: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500',
+        shopPhotos: ['https://images.unsplash.com/photo-1504222490345-c075b6008014?w=500'],
+        capabilities: ['24V Starter Motor', 'Alternator', 'ECM Wiring', 'CAN Bus', 'Chassis Harness'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'Bus', 'LCV'],
+        documents: [{ id: 'd3', type: 'Aadhaar', name: 'Santosh_Aadhaar.pdf' }]
+      },
+      {
+        id: 'prov_diag_1', userId: 'user_prov_diag', businessName: 'Apex Truck ECU Diagnostics & DEF/AdBlue Tuning',
+        ownerName: 'Vikas Manchanda', category: 'DIAGNOSTIC', phone: '9899112233', whatsapp: '919899112233',
+        address: 'NH-44 Murthal Toll Bypass, Sonipat Border', city: 'Sonipat', state: 'Haryana', pincode: '131027',
+        lat: 28.9950, lng: 77.0850, serviceRadiusKm: 50, experienceYears: 9,
+        description: 'Advanced OE-level scanning for BS6 Cummins, Tata, Eicher, Volvo, Scania. DPF regeneration, SCR pump fault clearing, AdBlue sensor error rectification.',
+        priceRange: '₹₹₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'VERIFIED', rating: 4.9, reviewCount: 42,
+        profilePhoto: 'https://images.unsplash.com/photo-1563770660941-20978e870e26?w=500',
+        shopPhotos: ['https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500'],
+        capabilities: ['OBD Truck Scanning', 'DPF Regeneration', 'DEF / AdBlue Error Clearing', 'Live Actuator Test'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'Bus', 'Tipper'],
+        documents: [{ id: 'd4', type: 'Trade License', name: 'Apex_Tech_License.pdf' }]
+      },
+      {
+        id: 'prov_tyre_1', userId: 'user_prov_tyre', businessName: 'Punjab Heavy Tyre Care & 24x7 Puncture Mobile Van',
+        ownerName: 'Harbhajan Singh', category: 'TYRE', phone: '9877112233', whatsapp: '919877112233',
+        address: 'GT Karnal Road, Singhu Border, SGTN Extension', city: 'Delhi', state: 'Delhi', pincode: '110040',
+        lat: 28.7610, lng: 77.1470, serviceRadiusKm: 30, experienceYears: 20,
+        description: 'Heavy duty pneumatic tyre removal, tube & tubeless puncture repair, laser wheel alignment, new & retreaded commercial tyres from Apollo, MRF, JK Tyre.',
+        priceRange: '₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'VERIFIED', rating: 4.6, reviewCount: 29,
+        profilePhoto: 'https://images.unsplash.com/photo-1578844251758-2f71da64c96f?w=500',
+        shopPhotos: ['https://images.unsplash.com/photo-1580273916550-e323be2ae537?w=500'],
+        capabilities: ['Tubeless Puncture', 'Laser Alignment', 'Tyre Replacement', 'Air Compressor Van'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'Bus', 'LCV'],
+        documents: [{ id: 'd5', type: 'Trade License', name: 'Punjab_Tyres_MCD.pdf' }]
+      },
+      {
+        id: 'prov_sgtn_towing_1', userId: 'user_prov_towing', businessName: 'Dhillon Heavy 60-Ton Crane & Hydraulic Towing',
+        ownerName: 'Balwinder Dhillon', category: 'TOWING', phone: '9833445566', whatsapp: '919833445566',
+        address: 'Transport Nagar Gate No. 2, NH-44', city: 'Delhi', state: 'Delhi', pincode: '110042',
+        lat: 28.7510, lng: 77.1390, serviceRadiusKm: 100, experienceYears: 15,
+        description: 'Equipped with 60-ton hydraulic underlift recovery cranes, flatbed towing for loaded 40ft & 55ft trailers, overturned tanker recovery, and fast highway accident clearance.',
+        priceRange: '₹₹₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'VERIFIED', rating: 4.9, reviewCount: 56,
+        profilePhoto: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=500',
+        shopPhotos: ['https://images.unsplash.com/photo-1508974239320-0a029497e820?w=500'],
+        capabilities: ['60-Ton Hydraulic Underlift', 'Trailer Towing', 'Rollover Recovery', '24x7 Highway Dispatch'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'Bus', 'Tipper'],
+        documents: [{ id: 'd6', type: 'Crane Fitness', name: 'Crane_60T_Certificate.pdf' }]
+      },
+      {
+        id: 'prov_parking_1', userId: 'user_prov_park', businessName: 'Suraksha 24x7 Heavy Truck Park & Rest Terminal',
+        ownerName: 'Chaudhary Raghubir Singh', category: 'TRUCK_PARKING', phone: '9844332211', whatsapp: '919844332211',
+        address: 'Near Kundli KMP Expressway Junction', city: 'Sonipat', state: 'Haryana', pincode: '131028',
+        lat: 28.8700, lng: 77.1200, serviceRadiusKm: 50, experienceYears: 16,
+        description: '350+ heavy truck capacity paved parking, armed security guards, 360-degree night vision CCTV, clean washrooms, 24-hour driver cots, pure RO water.',
+        priceRange: '₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'VERIFIED', rating: 4.9, reviewCount: 88,
+        profilePhoto: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=500',
+        shopPhotos: [],
+        capabilities: ['350 Truck Capacity', 'Armed Security & CCTV', 'Clean Washrooms & Cots', 'RO Drinking Water'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'Bus', 'Tipper'],
+        documents: []
+      },
+      {
+        id: 'prov_pending_tyre_1', userId: 'user_prov_pending', businessName: 'Kailash Highway Tyre Works & Puncture Service',
+        ownerName: 'Kailash Sharma', category: 'TYRE', phone: '9844556677', whatsapp: '919844556677',
+        address: 'NH-19 Bypass, Near Rania Toll Plaza', city: 'Kanpur', state: 'Uttar Pradesh', pincode: '208001',
+        lat: 26.4600, lng: 80.3200, serviceRadiusKm: 25, experienceYears: 7,
+        description: 'Truck tubeless puncture repair, vulcanizing hot patch, tyre rotation and air filling station.',
+        priceRange: '₹', is24x7: true, isEmergencyService: true, isAvailable: true,
+        verificationStatus: 'PENDING', rating: 0, reviewCount: 0,
+        profilePhoto: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500',
+        shopPhotos: ['https://images.unsplash.com/photo-1580273916550-e323be2ae537?w=500'],
+        capabilities: ['Tubeless Puncture', 'Vulcanizing', 'Tyre Rotation'],
+        supportedVehicles: ['Truck', 'Trailer', 'Tanker', 'LCV'],
+        documents: [{ id: 'd7', type: 'Aadhaar', name: 'Aadhaar_Kailash.pdf' }, { id: 'd8', type: 'Shop Photo', name: 'Signboard.jpg' }]
+      }
+    ];
+
+    const SEED_REQUESTS = [
+      {
+        id: 'req_101', requestCode: 'DM-REQ-8492', driverId: 'user_driver_1', driverName: 'Sardar Gurdeep Singh', driverPhone: '9876543210',
+        providerId: 'prov_sgtn_mechanic_1', providerName: 'Kisan Diesel Works & BS6 Roadside Specialist', providerPhone: '9811223344',
+        category: 'MECHANIC', vehicleDetails: { vehicleNumber: 'PB 10 CT 8492', vehicleType: 'Trailer', make: 'Tata Motors', model: 'Prima 5530.S' },
+        description: 'Clutch booster failure. Air pressure dropping rapidly and gear lever jammed in 4th gear approaching Alipur toll bypass.',
+        isEmergency: true, driverLat: 28.7650, driverLng: 77.1380, driverAddress: 'Near Alipur Red Light, GT Karnal Road, Delhi',
+        status: 'WORK_STARTED', etaMinutes: 15, createdAt: new Date(Date.now() - 3600000).toISOString(), invoiceId: 'inv_101'
+      }
+    ];
+
+    const SEED_INVOICES = [
+      {
+        id: 'inv_101', invoiceNumber: 'INV-2026-0089', requestId: 'req_101', providerId: 'prov_sgtn_mechanic_1', providerName: 'Kisan Diesel Works',
+        driverId: 'user_driver_1', driverName: 'Sardar Gurdeep Singh', vehicleNumber: 'PB 10 CT 8492',
+        items: [
+          { id: '1', description: 'Wabco Heavy Clutch Booster Assembly (Genuine)', quantity: 1, unitPrice: 4200, type: 'PART' },
+          { id: '2', description: 'High Pressure Air Hose & Couplers', quantity: 2, unitPrice: 350, type: 'PART' },
+          { id: '3', description: 'Highway Emergency Roadside Labour & Hydraulic Bleeding', quantity: 1, unitPrice: 1200, type: 'LABOUR' }
+        ],
+        partsSubtotal: 4900, labourSubtotal: 1200, gstAmount: 240, totalAmount: 6340, paymentMethod: 'UPI', paymentStatus: 'PENDING', createdAt: new Date().toISOString()
+      }
+    ];
+
+    // Haversine Distance in KM
+    function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
+      if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+      const R = 6371;
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return parseFloat((R * c).toFixed(1));
+    }
+
+    // --- MAIN APP COMPONENT ---
+    function DriverMitraApp() {
+      // Theme & Lang
+      const [isDark, setIsDark] = useState(true);
+      const [lang, setLang] = useState('en');
+      
+      // Active user & Role
+      const [currentUser, setCurrentUser] = useState(SEED_USERS[0]);
+      const [currentTab, setCurrentTab] = useState('home');
+      const [tabParams, setTabParams] = useState({});
+
+      // State Datasets
+      const [providers, setProviders] = useState(() => {
+        const saved = localStorage.getItem('dm_providers_standalone');
+        return saved ? JSON.parse(saved) : SEED_PROVIDERS;
+      });
+      const [vehicles, setVehicles] = useState(SEED_VEHICLES);
+      const [requests, setRequests] = useState(() => {
+        const saved = localStorage.getItem('dm_requests_standalone');
+        return saved ? JSON.parse(saved) : SEED_REQUESTS;
+      });
+      const [invoices, setInvoices] = useState(() => {
+        const saved = localStorage.getItem('dm_invoices_standalone');
+        return saved ? JSON.parse(saved) : SEED_INVOICES;
+      });
+
+      // Location State
+      const [userLat, setUserLat] = useState(28.7562);
+      const [userLng, setUserLng] = useState(77.1432);
+      const [locationLabel, setLocationLabel] = useState('Sanjay Gandhi Transport Nagar (SGTN), Delhi');
+      const [radiusKm, setRadiusKm] = useState(50);
+      const [selectedCategory, setSelectedCategory] = useState('ALL');
+      const [searchQuery, setSearchQuery] = useState('');
+
+      // Modals
+      const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
+      const [helpRequestProvider, setHelpRequestProvider] = useState(null);
+      const [activeInvoice, setActiveInvoice] = useState(null);
+      const [activeChatRequest, setActiveChatRequest] = useState(null);
+      const [toast, setToast] = useState(null);
+      const [showFloatingHelp, setShowFloatingHelp] = useState(false);
+
+      const showNotification = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 4000);
+      };
+
+      const navigateTo = (tab, params = {}) => {
+        setCurrentTab(tab);
+        setTabParams(params);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      // Apply Dark Mode Class to HTML
+      useEffect(() => {
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }, [isDark]);
+
+      // Calculate Distances dynamically
+      const providersWithDist = providers.map(p => ({
+        ...p,
+        distanceKm: calculateHaversineDistanceKm(userLat, userLng, p.lat, p.lng)
+      }));
+
+      // Filtered Providers
+      const filteredProviders = providersWithDist.filter(p => {
+        if (currentUser.role !== 'ADMIN' && p.verificationStatus !== 'VERIFIED' && p.userId !== currentUser.id) return false;
+        if (selectedCategory !== 'ALL' && p.category !== selectedCategory) return false;
+        if (p.distanceKm > radiusKm) return false;
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          return p.businessName.toLowerCase().includes(q) || p.ownerName.toLowerCase().includes(q) || p.city.toLowerCase().includes(q);
+        }
+        return true;
+      }).sort((a, b) => a.distanceKm - b.distanceKm);
+
+      // Handle GPS
+      const handleDetectGPS = () => {
+        if ('geolocation' in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setUserLat(pos.coords.latitude);
+              setUserLng(pos.coords.longitude);
+              setLocationLabel(`Live GPS: Lat ${pos.coords.latitude.toFixed(4)}, Lng ${pos.coords.longitude.toFixed(4)}`);
+              showNotification('📍 Exact GPS Location Acquired!');
+            },
+            () => showNotification('Using Transport Nagar default coordinates.')
+          );
+        }
+      };
+
+      // Switch Demo Role
+      const handleSwitchRole = (userId) => {
+        const u = SEED_USERS.find(user => user.id === userId);
+        if (u) {
+          setCurrentUser(u);
+          showNotification(`Switched Active Role to ${u.name} (${u.role})`);
+          if (u.role === 'ADMIN') setCurrentTab('admin');
+          else if (u.role === 'PROVIDER') setCurrentTab('provider-dashboard');
+          else setCurrentTab('driver-dashboard');
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col justify-between">
+          
+          {/* 1. TOP NAV HEADER */}
+          <header className="sticky top-0 z-40 bg-white/95 dark:bg-navy-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+              
+              {/* Logo */}
+              <div onClick={() => navigateTo('home')} className="flex items-center gap-3 cursor-pointer select-none">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-400 flex items-center justify-center text-white text-xl shadow-lg shadow-brand-500/30">
+                  🚚
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-lg tracking-tight">DRIVER <span className="text-brand-500">MITRA</span></span>
+                    <span className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300">INDIA</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold -mt-1">
+                    {lang === 'hi' ? 'आपका सच्चा हमसफ़र' : 'Your Roadside Partner'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Desktop Nav Links */}
+              <nav className="hidden lg:flex items-center gap-1 text-xs font-bold">
+                <button onClick={() => navigateTo('home')} className={`px-3 py-2 rounded-lg ${currentTab === 'home' ? 'text-brand-500 bg-brand-50 dark:bg-brand-950' : 'text-slate-600 dark:text-slate-300'}`}>Home</button>
+                <button onClick={() => navigateTo('nearby')} className={`px-3 py-2 rounded-lg ${currentTab === 'nearby' ? 'text-brand-500 bg-brand-50 dark:bg-brand-950' : 'text-slate-600 dark:text-slate-300'}`}>Nearby Services</button>
+                <button onClick={() => navigateTo('requests')} className={`px-3 py-2 rounded-lg ${currentTab === 'requests' ? 'text-brand-500 bg-brand-50 dark:bg-brand-950' : 'text-slate-600 dark:text-slate-300'}`}>Requests ({requests.length})</button>
+                <button onClick={() => setIsEmergencyModalOpen(true)} className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black animate-pulse shadow-md shadow-red-600/30">🚨 SOS HELP</button>
+              </nav>
+
+              {/* Controls */}
+              <div className="flex items-center gap-2">
+                <button onClick={() => setLang(lang === 'en' ? 'hi' : 'en')} className="px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-navy-800 text-xs font-bold">
+                  {lang === 'en' ? 'हिन्दी' : 'English'}
+                </button>
+                <button onClick={() => setIsDark(!isDark)} className="p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-navy-800 text-sm">
+                  {isDark ? '☀️' : '🌙'}
+                </button>
+                
+                {/* Role Profile Badge */}
+                <div className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-100 dark:bg-navy-800 border border-slate-300 dark:border-slate-700 text-xs font-bold">
+                  <img src={currentUser.avatar} className="w-7 h-7 rounded-lg object-cover" />
+                  <span className="hidden sm:inline max-w-[90px] truncate">{currentUser.name.split(' ')[0]}</span>
+                </div>
+              </div>
+
+            </div>
+          </header>
+
+          {/* 2. FLOATING ROLE SWITCHER TOOLBAR */}
+          <div className="fixed top-20 right-3 z-50 bg-slate-900/95 text-white border border-slate-700 rounded-2xl shadow-2xl p-2.5 text-xs max-w-xs backdrop-blur-md">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 font-extrabold text-[11px] text-brand-400">
+              <span>⚡ Fast Role Switcher</span>
+              <span className="text-[10px] text-slate-400">Current: {currentUser.role}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 pt-2">
+              <button onClick={() => handleSwitchRole('user_driver_1')} className={`p-1.5 rounded text-left ${currentUser.id === 'user_driver_1' ? 'bg-brand-600 font-bold text-white' : 'bg-slate-800 text-slate-300'}`}>🚚 Driver (Harpreet)</button>
+              <button onClick={() => handleSwitchRole('user_driver_2')} className={`p-1.5 rounded text-left ${currentUser.id === 'user_driver_2' ? 'bg-brand-600 font-bold text-white' : 'bg-slate-800 text-slate-300'}`}>🚚 Driver 2 (Tanker)</button>
+              <button onClick={() => handleSwitchRole('user_prov_mechanic')} className={`p-1.5 rounded text-left ${currentUser.id === 'user_prov_mechanic' ? 'bg-brand-600 font-bold text-white' : 'bg-slate-800 text-slate-300'}`}>🛠️ Mechanic Rafiq</button>
+              <button onClick={() => handleSwitchRole('user_prov_towing')} className={`p-1.5 rounded text-left ${currentUser.id === 'user_prov_towing' ? 'bg-brand-600 font-bold text-white' : 'bg-slate-800 text-slate-300'}`}>🏗️ 60T Crane Dhillon</button>
+              <button onClick={() => handleSwitchRole('user_prov_pending')} className={`p-1.5 rounded text-left ${currentUser.id === 'user_prov_pending' ? 'bg-amber-600 font-bold text-white' : 'bg-slate-800 text-slate-300'}`}>⚠️ Pending Tyre Shop</button>
+              <button onClick={() => handleSwitchRole('user_admin')} className={`p-1.5 rounded text-left ${currentUser.id === 'user_admin' ? 'bg-purple-600 font-bold text-white' : 'bg-purple-950 text-purple-200'}`}>👑 Central Admin</button>
+            </div>
+          </div>
+
+          {/* 3. MAIN CONTENT CONTAINER */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+            
+            {/* VIEW: HOME PAGE */}
+            {currentTab === 'home' && (
+              <div className="space-y-10">
+                {/* Hero */}
+                <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy-950 via-slate-900 to-navy-900 border border-slate-800 text-white p-6 sm:p-12 shadow-2xl space-y-6">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-500/20 border border-brand-500/30 text-brand-400 text-xs font-bold uppercase">
+                    <span>● 24x7 India Highway Roadside Network</span>
+                  </div>
+                  <h1 className="text-3xl sm:text-5xl font-black leading-tight">
+                    Need Help on the Road? <br/><span className="text-brand-500">रास्ते में गाड़ी खराब हो गई?</span>
+                  </h1>
+                  <p className="text-xs sm:text-base text-slate-300 max-w-2xl">
+                    Find verified heavy diesel mechanics, 24V electricians, tyre repairers, 60-Ton towing cranes, and secure CCTV parking within minutes along any National Highway.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <button onClick={() => navigateTo('nearby')} className="py-4 px-6 rounded-2xl bg-gradient-to-r from-brand-500 to-amber-500 text-white font-extrabold text-sm sm:text-base uppercase shadow-xl shadow-brand-500/30 hover:scale-105 transition">
+                      🔍 FIND HELP NEAR ME (मेरे पास खोजें)
+                    </button>
+                    <button onClick={() => setIsEmergencyModalOpen(true)} className="py-4 px-6 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-sm sm:text-base uppercase shadow-xl shadow-red-500/40 animate-pulse">
+                      🚨 EMERGENCY HELP (इमरजेंसी सहायता)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Popular Categories */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl sm:text-2xl font-black">Popular Roadside Services</h2>
+                    <button onClick={() => navigateTo('nearby')} className="text-xs font-bold text-brand-500">View All</button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { key: 'MECHANIC', icon: '🔧', name: 'Heavy Mechanic / Mistri', desc: 'Engine, BS6 Overhaul, Clutch' },
+                      { key: 'WIREMAN', icon: '⚡', name: 'Auto Electrician / Wireman', desc: '24V Wiring, Starter, ECM' },
+                      { key: 'DIAGNOSTIC', icon: '💻', name: 'Diagnostic Technician', desc: 'ECU Scanning, DPF, DEF/AdBlue' },
+                      { key: 'TYRE', icon: '🛞', name: 'Tyre & Puncture Shop', desc: 'Tubeless, Alignment, Tyres' },
+                      { key: 'TOWING', icon: '🏗️', name: '60T Hydraulic Crane', desc: 'Heavy Recovery, Trailer Towing' },
+                      { key: 'TRUCK_PARKING', icon: '🅿️', name: 'Secure Truck Parking', desc: 'CCTV Guarded, Washrooms' },
+                      { key: 'BATTERY', icon: '🔋', name: '24V Battery & Jumpstart', desc: 'Instant Booster Van' },
+                      { key: 'RESTAURANT', icon: '🍛', name: 'Highway Dhaba / Food', desc: 'Pure Veg, Trailer Parking' }
+                    ].map(c => (
+                      <div key={c.key} onClick={() => { setSelectedCategory(c.key); navigateTo('nearby'); }} className="p-4 rounded-2xl bg-white dark:bg-navy-850 border border-slate-200 dark:border-slate-800 hover:border-brand-500 cursor-pointer shadow-sm hover:shadow-md transition space-y-2">
+                        <span className="text-3xl">{c.icon}</span>
+                        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{c.name}</h3>
+                        <p className="text-[11px] text-slate-500">{c.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW: NEARBY SEARCH */}
+            {currentTab === 'nearby' && (
+              <div className="space-y-6">
+                {/* Search Bar */}
+                <div className="p-5 rounded-3xl bg-white dark:bg-navy-850 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400">Search Center</span>
+                      <p className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">{locationLabel}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={handleDetectGPS} className="py-2 px-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs shadow">
+                        📍 Detect My Location (GPS)
+                      </button>
+                      <select value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="py-2 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-navy-800 text-xs font-bold">
+                        <option value={10}>10 KM Radius</option>
+                        <option value={25}>25 KM Radius</option>
+                        <option value={50}>50 KM Radius</option>
+                        <option value={100}>100 KM Radius</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Category Pill Filters with Real Counts */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                    {['ALL', 'MECHANIC', 'WIREMAN', 'DIAGNOSTIC', 'TYRE', 'TOWING', 'TRUCK_PARKING'].map(cat => {
+                      const count = providersWithDist.filter(p => (cat === 'ALL' || p.category === cat) && p.distanceKm <= radiusKm && p.verificationStatus === 'VERIFIED').length;
+                      return (
+                        <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-3 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition ${selectedCategory === cat ? 'bg-brand-600 text-white shadow' : 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300'}`}>
+                          {cat === 'ALL' ? '🌟 All Services' : cat} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Headline Counter */}
+                <h2 className="text-lg font-extrabold">
+                  <span className="text-brand-500 font-black">{filteredProviders.length}</span> verified providers found within {radiusKm} km
+                </h2>
+
+                {/* Providers Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredProviders.map(p => (
+                    <div key={p.id} className="p-5 rounded-3xl bg-white dark:bg-navy-850 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400 border border-brand-200">
+                            {p.category}
+                          </span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            📍 {p.distanceKm} km away
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <img src={p.profilePhoto} className="w-14 h-14 rounded-2xl object-cover flex-shrink-0" />
+                          <div>
+                            <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-tight">{p.businessName}</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Owner: {p.ownerName} • {p.experienceYears} yrs exp.</p>
+                            <div className="text-xs text-amber-500 font-extrabold mt-1">⭐ {p.rating} ({p.reviewCount} reviews)</div>
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{p.description}</p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <a href={`tel:${p.phone}`} className="flex-1 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs text-center">📞 Call</a>
+                        <a href={`https://wa.me/${p.whatsapp}?text=Hello%20${p.businessName},%20I%20need%20assistance.`} target="_blank" className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs text-center">💬 WhatsApp</a>
+                        <button onClick={() => setHelpRequestProvider(p)} className="flex-1 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs">Request</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW: DRIVER DASHBOARD */}
+            {currentTab === 'driver-dashboard' && (
+              <div className="space-y-6">
+                <div className="p-6 rounded-3xl bg-slate-900 text-white flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-black">{currentUser.name} (Driver Dashboard)</h2>
+                    <p className="text-xs text-slate-400">Mobile: {currentUser.phone}</p>
+                  </div>
+                  <button onClick={() => navigateTo('nearby')} className="py-2 px-4 rounded-xl bg-brand-600 text-white font-bold text-xs">Find Assistance</button>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-extrabold text-base">Registered Commercial Fleet</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {vehicles.filter(v => v.userId === currentUser.id).map(v => (
+                      <div key={v.id} className="p-4 rounded-2xl bg-white dark:bg-navy-850 border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <span className="font-black text-sm text-slate-900 dark:text-white block">{v.vehicleNumber}</span>
+                        <p className="text-xs text-slate-500">{v.make} {v.model} ({v.year}) • {v.vehicleType}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-extrabold text-base">Active Roadside Assistance Requests</h3>
+                  {requests.filter(r => r.driverId === currentUser.id).map(req => (
+                    <div key={req.id} className="p-5 rounded-2xl bg-white dark:bg-navy-850 border border-slate-200 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-sm text-slate-900 dark:text-white">{req.providerName}</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">{req.status}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">{req.description}</p>
+                      <div className="flex items-center gap-2 pt-2">
+                        <button onClick={() => setActiveInvoice(invoices.find(i => i.requestId === req.id))} className="py-1.5 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold">View Bill & Pay</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW: PROVIDER DASHBOARD */}
+            {currentTab === 'provider-dashboard' && (
+              <div className="space-y-6">
+                <div className="p-6 rounded-3xl bg-slate-900 text-white flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-black">{currentUser.name} (Workshop Dashboard)</h2>
+                    <p className="text-xs text-slate-400">Incoming breakdown calls and live job tracking.</p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-extrabold text-xs">AVAILABLE NOW</span>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-extrabold text-base">Incoming Highway Service Requests</h3>
+                  {requests.map(req => (
+                    <div key={req.id} className="p-5 rounded-2xl bg-white dark:bg-navy-850 border-2 border-brand-500/50 shadow-md space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-sm text-slate-900 dark:text-white">{req.driverName} ({req.vehicleDetails.vehicleNumber})</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">{req.status}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">"{req.description}"</p>
+                      <div className="flex items-center gap-2 pt-2">
+                        <button onClick={() => {
+                          const updated = requests.map(r => r.id === req.id ? { ...r, status: 'COMPLETED' } : r);
+                          setRequests(updated);
+                          localStorage.setItem('dm_requests_standalone', JSON.stringify(updated));
+                          showNotification('Job marked as COMPLETED!');
+                        }} className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs">
+                          ✓ Mark Work Completed
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW: ADMIN COMMAND PORTAL */}
+            {currentTab === 'admin' && (
+              <div className="space-y-6">
+                <div className="p-6 rounded-3xl bg-purple-950 border border-purple-800 text-white space-y-2">
+                  <h2 className="text-2xl font-black">Central Controller Administration Portal</h2>
+                  <p className="text-xs text-purple-200">Inspect pending workshop verification documents and grant Verified Partner status.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-extrabold text-base">Pending Workshop Verification Queue</h3>
+                  {providers.filter(p => p.verificationStatus === 'PENDING').map(p => (
+                    <div key={p.id} className="p-5 rounded-2xl bg-white dark:bg-navy-850 border-2 border-amber-500/40 shadow-sm flex items-center justify-between">
+                      <div>
+                        <span className="font-black text-sm text-slate-900 dark:text-white block">{p.businessName}</span>
+                        <p className="text-xs text-slate-500">Owner: {p.ownerName} • Phone: {p.phone} • {p.city}</p>
+                        <p className="text-xs text-emerald-600 font-semibold mt-1">Aadhaar & Trade License attached</p>
+                      </div>
+                      <button onClick={() => {
+                        const updated = providers.map(item => item.id === p.id ? { ...item, verificationStatus: 'VERIFIED' } : item);
+                        setProviders(updated);
+                        localStorage.setItem('dm_providers_standalone', JSON.stringify(updated));
+                        showNotification(`Approved ${p.businessName}! Status set to VERIFIED.`);
+                      }} className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow">
+                        ✓ Approve & Grant Verified Badge
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW: ALL REQUESTS */}
+            {currentTab === 'requests' && (
+              <div className="space-y-4">
+                <h2 className="text-2xl font-black">All Roadside Assistance Requests</h2>
+                {requests.map(req => (
+                  <div key={req.id} className="p-5 rounded-2xl bg-white dark:bg-navy-850 border border-slate-200 dark:border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-sm text-slate-900 dark:text-white">{req.providerName}</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-xs font-bold">{req.status}</span>
+                    </div>
+                    <p className="text-xs text-slate-500">Vehicle: {req.vehicleDetails.vehicleNumber} • {req.driverAddress}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">"{req.description}"</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </main>
+
+          {/* 4. EMERGENCY SOS MODAL */}
+          {isEmergencyModalOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white dark:bg-navy-900 border-2 border-red-500 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-center">
+                <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950 text-red-600 flex items-center justify-center text-3xl mx-auto animate-pulse">
+                  🚨
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white">EMERGENCY HIGHWAY SOS</h3>
+                  <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-1">24x7 Priority Roadside Emergency Dispatch</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <a href="tel:1033" className="p-3 rounded-2xl bg-red-600 text-white font-black text-xs">NHAI: 1033</a>
+                  <a href="tel:112" className="p-3 rounded-2xl bg-slate-800 text-white font-black text-xs">Police: 112</a>
+                  <a href="tel:108" className="p-3 rounded-2xl bg-slate-800 text-white font-black text-xs">Ambulance: 108</a>
+                </div>
+
+                <button onClick={() => {
+                  showNotification('🚨 SOS Broadcasted to nearest 24x7 emergency crane & mechanics!');
+                  setIsEmergencyModalOpen(false);
+                }} className="w-full py-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-black text-sm uppercase shadow-xl animate-pulse">
+                  BROADCAST EMERGENCY SOS NOW
+                </button>
+                <button onClick={() => setIsEmergencyModalOpen(false)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* 5. REQUEST HELP MODAL */}
+          {helpRequestProvider && (
+            <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white dark:bg-navy-900 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-xs">
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">Request Roadside Help</h3>
+                <p className="text-slate-500">From: <strong>{helpRequestProvider.businessName}</strong></p>
+                <textarea rows={3} placeholder="Describe breakdown (e.g. clutch booster pipe burst)..." className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-navy-800 text-slate-900 dark:text-white outline-none" defaultValue="Air pressure dropping rapidly, gear jammed near Alipur toll." id="req_desc_input"></textarea>
+                <div className="flex gap-2">
+                  <button onClick={() => setHelpRequestProvider(null)} className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 font-bold">Cancel</button>
+                  <button onClick={() => {
+                    const desc = document.getElementById('req_desc_input').value;
+                    const newReq = {
+                      id: `req_${Date.now()}`,
+                      requestCode: `DM-REQ-${Math.floor(1000 + Math.random() * 9000)}`,
+                      driverId: currentUser.id,
+                      driverName: currentUser.name,
+                      driverPhone: currentUser.phone,
+                      providerId: helpRequestProvider.id,
+                      providerName: helpRequestProvider.businessName,
+                      providerPhone: helpRequestProvider.phone,
+                      category: helpRequestProvider.category,
+                      vehicleDetails: { vehicleNumber: 'PB 10 CT 8492', vehicleType: 'Trailer', make: 'Tata', model: 'Prima' },
+                      description: desc,
+                      isEmergency: true,
+                      driverAddress: locationLabel,
+                      status: 'REQUESTED',
+                      createdAt: new Date().toISOString()
+                    };
+                    const updated = [newReq, ...requests];
+                    setRequests(updated);
+                    localStorage.setItem('dm_requests_standalone', JSON.stringify(updated));
+                    setHelpRequestProvider(null);
+                    showNotification(`Help request sent to ${helpRequestProvider.businessName}!`);
+                    navigateTo('requests');
+                  }} className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white font-bold">Send Help Request</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6. INVOICE MODAL */}
+          {activeInvoice && (
+            <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white dark:bg-navy-900 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-xs">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Service Invoice ({activeInvoice.invoiceNumber})</h3>
+                  <button onClick={() => setActiveInvoice(null)} className="text-slate-400 font-bold">✕</button>
+                </div>
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {activeInvoice.items.map((it, idx) => (
+                    <div key={idx} className="py-2 flex justify-between">
+                      <span>{it.description}</span>
+                      <strong className="text-slate-900 dark:text-white">₹{it.unitPrice}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between font-black text-base text-emerald-500">
+                  <span>Grand Total (Inc. GST):</span>
+                  <span>₹{activeInvoice.totalAmount}</span>
+                </div>
+                <button onClick={() => {
+                  showNotification('✓ ₹6,340 paid successfully via UPI!');
+                  setActiveInvoice(null);
+                }} className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase shadow">
+                  Pay Now via UPI QR / Cash
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 7. TOAST ALERT */}
+          {toast && (
+            <div className="fixed bottom-20 right-4 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs font-bold animate-bounce">
+              {toast}
+            </div>
+          )}
+
+          {/* 8. FOOTER */}
+          <footer className="bg-slate-900 text-slate-400 text-center py-6 text-xs border-t border-slate-800">
+            <p className="font-bold text-white">DRIVER MITRA — Your Roadside Partner</p>
+            <p className="text-[11px] mt-1">24x7 India Highway Roadside Network for Heavy Commercial Vehicles</p>
+          </footer>
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<DriverMitraApp />);
+  </script>
+</body>
+</html>
